@@ -22,8 +22,6 @@ addImageBtn.addEventListener('change', (event) => {
                 const x = (canvas.width - imgWidth * scale) / 2;
                 const y = (canvas.height - imgHeight * scale) / 2;
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                console.log(imgWidth * scale);
-                console.log(imgHeight * scale);
                 ctx.drawImage(image, 0, 0, imgWidth, imgHeight, x, y, imgWidth * scale, imgHeight * scale);
                 uploadedImage = image;
             }
@@ -56,7 +54,6 @@ addTextBoxBtn.addEventListener('click', () => {
         e.stopPropagation();
     });
     textBoxWrapper.addEventListener('mouseleave', () => {
-        console.log("hellow");
         if (selectedTextBox) {
             selectedTextBox.classList.remove('selected');
             selectedTextBox = null;
@@ -64,6 +61,11 @@ addTextBoxBtn.addEventListener('click', () => {
     });
 
     textBoxContent.addEventListener('click', (e) => {
+        textBoxContent.contentEditable = true;
+        textBoxContent.focus();
+        e.stopPropagation();
+    });
+    textBoxContent.addEventListener('touchend', (e) => {
         textBoxContent.contentEditable = true;
         textBoxContent.focus();
         e.stopPropagation();
@@ -78,20 +80,36 @@ function makeDraggable(element) {
     let isDragging = false;
     let offsetX, offsetY;
 
-    element.addEventListener('mousedown', (e) => {
+    const startDrag = (e) => {
         isDragging = true;
-        offsetX = e.offsetX;
-        offsetY = e.offsetY;
-    });
+        // For touch events, we get the touch position.
+        if (e.type === "touchstart") {
+            offsetX = e.touches[0].radiusX;
+            offsetY = e.touches[0].radiusY;
+            console.log(e);
+        } else { // For mouse events.
+            offsetX = e.offsetX;
+            offsetY = e.offsetY;
+            console.log(e);
+        }
+        e.preventDefault();
+    };
 
-    document.addEventListener('mousemove', (e) => {
+    const drag = (e) => {
+
         if (isDragging) {
             const canvasWrapper = document.querySelector('#canvasWrapper');
             const wrapperRect = canvasWrapper.getBoundingClientRect();
 
-            const mouseX = e.clientX - wrapperRect.left - offsetX;
-            const mouseY = e.clientY - wrapperRect.top - offsetY;
+            let mouseX, mouseY;
 
+            if (e.type === "touchmove") {
+                mouseX = e.touches[0].clientX - wrapperRect.left - offsetX;
+                mouseY = e.touches[0].clientY - wrapperRect.top - offsetY;
+            } else {
+                mouseX = e.clientX - wrapperRect.left - offsetX;
+                mouseY = e.clientY - wrapperRect.top - offsetY;
+            }
             const maxX = canvasWrapper.clientWidth - element.offsetWidth;
             const maxY = canvasWrapper.clientHeight - element.offsetHeight;
 
@@ -101,33 +119,55 @@ function makeDraggable(element) {
             element.style.left = `${newX}px`;
             element.style.top = `${newY}px`;
         }
-    });
+    };
 
-    document.addEventListener('mouseup', () => {
+    const endDrag = () => {
         isDragging = false;
-    });
+    };
+
+    element.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', endDrag);
+    element.addEventListener('touchstart', startDrag, { passive: false });
+    document.addEventListener('touchmove', drag, { passive: false });
+    document.addEventListener('touchend', endDrag);
+    
+    // Disable touch actions like scrolling while dragging
+    element.style.touchAction = 'none';
 }
+
 document.addEventListener('keyup', (e) => {
     if (e.key === 'Backspace' && selectedTextBox) {
         selectedTextBox.remove();
         selectedTextBox = null;
     }
 });
+const canvasWrapper = document.querySelector('#canvasWrapper'); // Ensure canvasWrapper is accessible
 
 function drawCanvas() {
-    // uploadedImage = image.
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas before redrawing
+
+    // Draw the uploaded image if there is one
     if (uploadedImage) {
-        ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
-    } else {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const imgWidth = uploadedImage.width;
+        const imgHeight = uploadedImage.height;
+        const scaleY = canvas.height / imgHeight;
+        const scaleX = canvas.width / imgWidth;
+        const scale = Math.min(scaleX, scaleY);
+        const x = (canvas.width - imgWidth * scale) / 2;
+        const y = (canvas.height - imgHeight * scale) / 2;
+        ctx.drawImage(uploadedImage, 0, 0, imgWidth, imgHeight, x, y, imgWidth * scale, imgHeight * scale);
     }
 
+    // Draw the text boxes with correct position scaling
     const textBoxes = document.querySelectorAll('.text-box');
     textBoxes.forEach((box) => {
         const rect = box.getBoundingClientRect();
-        const canvasRect = canvas.getBoundingClientRect();
-        const x = rect.left - canvasRect.left;
-        const y = rect.top - canvasRect.top + 20;
+        const wrapperRect = canvasWrapper.getBoundingClientRect();
+
+        // Adjust the position of the text box based on the canvas wrapper
+        const x = (rect.left - wrapperRect.left) * (canvas.width / wrapperRect.width);
+        const y = (rect.top - wrapperRect.top) * (canvas.height / wrapperRect.height) + 20;
 
         ctx.fillStyle = 'black';
         ctx.font = '20px Arial';
@@ -135,6 +175,17 @@ function drawCanvas() {
     });
 }
 
+// Ensure the canvas dimensions adjust based on the window size
+function resizeCanvas() {
+    const wrapperRect = canvasWrapper.getBoundingClientRect();
+    canvas.width = wrapperRect.width;
+    canvas.height = wrapperRect.height;
+}
+
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas(); // Initialize the canvas size on page load
+
+// Call drawCanvas() after elements are added or modified
 downloadBtn.addEventListener('click', () => {
     drawCanvas();
     const link = document.createElement('a');
@@ -142,5 +193,6 @@ downloadBtn.addEventListener('click', () => {
     link.href = canvas.toDataURL();
     link.click();
 });
+
 
 
